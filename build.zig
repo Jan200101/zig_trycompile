@@ -7,9 +7,13 @@ pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    test_compiles_zig(b, target, optimize);
-    test_compiles_c(b, target, optimize);
-    test_linking(b, target, optimize);
+    const enable_test = b.option(bool, "test", "test trycompile") orelse false;
+
+    if (enable_test) {
+        test_compiles_zig(b, target, optimize);
+        test_compiles_c(b, target, optimize);
+        test_linking(b, target, optimize);
+    }
 }
 
 fn test_compiles_zig(b: *Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) void {
@@ -102,14 +106,18 @@ fn test_linking(b: *Build, target: std.Build.ResolvedTarget, optimize: std.built
     }
 }
 
-fn make(b: *Build, artifact: *Step.Compile) bool {
+pub fn make(b: *Build, artifact: *Step.Compile) bool {
+    return trymake(b, artifact) catch false;
+}
+
+pub fn trymake(b: *Build, artifact: *Step.Compile) !bool {
     const allocator = b.allocator;
 
     var thread_pool: std.Thread.Pool = undefined;
-    thread_pool.init(.{
+    try thread_pool.init(.{
         .allocator = allocator,
         .n_jobs = 1,
-    }) catch return false;
+    });
     defer thread_pool.deinit();
 
     artifact.step.make(.{
@@ -118,9 +126,7 @@ fn make(b: *Build, artifact: *Step.Compile) bool {
         .watch = false,
         .web_server = null,
         .gpa = allocator,
-    }) catch {
-        return false;
-    };
+    }) catch return false;
 
     return true;
 }
